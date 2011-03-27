@@ -1,0 +1,80 @@
+diff -r 6fa299ad15c8 tools/firmware/hvmloader/acpi/dsdt.asl
+--- a/tools/firmware/hvmloader/acpi/dsdt.asl	Wed Mar 09 17:25:44 2011 +0000
++++ b/tools/firmware/hvmloader/acpi/dsdt.asl	Sun Mar 27 10:30:20 2011 +0100
+@@ -68,6 +68,7 @@
+            UAR2, 1,
+            LTP1, 1,
+            HPET, 1,
++	   SMC, 1,
+            Offset(4),
+            PMIN, 32,
+            PLEN, 32,
+diff -r 6fa299ad15c8 tools/firmware/hvmloader/config.h
+--- a/tools/firmware/hvmloader/config.h	Wed Mar 09 17:25:44 2011 +0000
++++ b/tools/firmware/hvmloader/config.h	Sun Mar 27 10:30:20 2011 +0100
+@@ -56,6 +56,7 @@
+     uint8_t  com2_present:1;    /* 0[1] - System has COM2? */
+     uint8_t  lpt1_present:1;    /* 0[2] - System has LPT1? */
+     uint8_t  hpet_present:1;    /* 0[3] - System has HPET? */
++    uint8_t  smc_present:1;     /* 0[2] - System has an apple SMC? */
+     uint32_t pci_min, pci_len;  /* 4, 8 - PCI I/O hole boundaries */
+     uint32_t madt_csum_addr;    /* 12   - Address of MADT checksum */
+     uint32_t madt_lapic0_addr;  /* 16   - Address of first MADT LAPIC struct */
+diff -r 6fa299ad15c8 tools/firmware/hvmloader/hvmloader.c
+--- a/tools/firmware/hvmloader/hvmloader.c	Wed Mar 09 17:25:44 2011 +0000
++++ b/tools/firmware/hvmloader/hvmloader.c	Sun Mar 27 10:30:20 2011 +0100
+@@ -811,6 +811,8 @@
+     bios_info->com2_present = uart_exists(0x2f8);
+     bios_info->lpt1_present = lpt_exists(0x378);
+     bios_info->hpet_present = hpet_exists(ACPI_HPET_ADDRESS);
++    bios_info->smc_present = smc_exists();
++
+     bios_info->pci_min = pci_mem_start;
+     bios_info->pci_len = pci_mem_end - pci_mem_start;
+     bios_info->madt_csum_addr = madt_csum_addr;
+diff -r 6fa299ad15c8 tools/firmware/hvmloader/util.c
+--- a/tools/firmware/hvmloader/util.c	Wed Mar 09 17:25:44 2011 +0000
++++ b/tools/firmware/hvmloader/util.c	Sun Mar 27 10:30:20 2011 +0100
+@@ -679,6 +679,20 @@
+     return ((hpet_id >> 16) == 0x8086);
+ }
+ 
++int smc_exists(void)
++{
++    uint8_t result;
++    
++    outb(APPLESMC_CMD_PORT, APPLESMC_READ_CMD);
++    result = inb(APPLESMC_CMD_PORT);
++    printf("Result from SMC inb=%d",result);
++    
++    /* Now we have to reset the thing :-( Use special reset magic */
++    outb(APPLESMC_CMD_PORT, APPLESMC_RESET_CMD);
++    
++    return (result == 0x0c);
++}
++
+ /*
+  * Local variables:
+  * mode: C
+diff -r 6fa299ad15c8 tools/firmware/hvmloader/util.h
+--- a/tools/firmware/hvmloader/util.h	Wed Mar 09 17:25:44 2011 +0000
++++ b/tools/firmware/hvmloader/util.h	Sun Mar 27 10:30:20 2011 +0100
+@@ -15,6 +15,10 @@
+ #define SEL_DATA32          0x0020
+ #define SEL_CODE64          0x0028
+ 
++#define APPLESMC_CMD_PORT	0x304
++#define APPLESMC_READ_CMD	0x10
++#define APPLESMC_RESET_CMD  0xff
++
+ #undef offsetof
+ #define offsetof(t, m) ((unsigned long)&((t *)0)->m)
+ 
+@@ -86,6 +90,7 @@
+ uint16_t get_cpu_mhz(void);
+ 
+ /* Hardware detection. */
++int smc_exists(void);
+ int uart_exists(uint16_t uart_base);
+ int lpt_exists(uint16_t lpt_base);
+ int hpet_exists(unsigned long hpet_base);
